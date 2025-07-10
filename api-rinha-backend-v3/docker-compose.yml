@@ -20,6 +20,8 @@ services:
     image: redis:alpine
     container_name: database
     command: redis-server --save "" --appendonly no --maxclients 20000
+    ports:
+      - "6379:6379"
     networks:
       - backend
     deploy:
@@ -33,6 +35,10 @@ services:
     restart: always
     networks:
       - backend
+      - payment-processor
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
     volumes:
       - .:/app
       - /app/node_modules

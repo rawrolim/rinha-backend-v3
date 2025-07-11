@@ -20,10 +20,14 @@ export async function createPayment(req: Request, res: Response) {
 
 export async function getPaymentsDetails(req: Request, res: Response) {
     try {
-        const successDefault = await getValue('successDefault');
+        const { from, to } = req.query;
+        let successDefault = await getValue('successDefault');
+        let successFallback = await getValue('successFallback');
+        if(from && to){
+            successDefault = successDefault.filter(item => from > item.requestedAt && item.requestedAt < to);
+            successFallback = successFallback.filter(item => from > item.requestedAt && item.requestedAt < to);
+        }
         const amountDefault = successDefault.reduce((total, current) => total + current.amount, 0);
-
-        const successFallback = await getValue('successFallback');
         const amountFallback = successFallback.reduce((total, current) => total + current.amount, 0);
 
         res.status(200).json({
@@ -38,6 +42,6 @@ export async function getPaymentsDetails(req: Request, res: Response) {
         });
     } catch (err) {
         console.log("ERRO PARA BUSCAR DADOS", err)
-        res.status(500).json({message:err})
+        res.status(500).json({ message: err })
     }
 }

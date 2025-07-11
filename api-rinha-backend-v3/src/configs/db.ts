@@ -1,21 +1,33 @@
-import { createClient } from "redis";
+import Redis from "ioredis";
 
-function getRedisClientConnection() {
-    const redisClient = createClient({ url: 'redis://database:6379' });
+export function getRedisClientConnection() {
+    const REDIS_URL = 'redis://localhost:6379';
+    const redisClient = new Redis({'host':'localhost', port: 6379});
     redisClient.on('error', (err) => console.log('Redis Client Error', err));
-    redisClient.connect();
     return redisClient;
 }
 
 // Function to set a key-value pair in Redis
-export async function setValue(key: string, value: string): Promise<void> {
+export async function addToQueue(key: string, value: any): Promise<void> {
     const redisClient = getRedisClientConnection();
-    await redisClient.set(key, value);
+    await redisClient.lpush(key, JSON.stringify(value));
     await redisClient.quit();
 };
 
 // Function to retrieve a value by key from Redis
-export async function getValue(key: string): Promise<string | null> {
+export async function removeToQueue(key: string){
     const redisClient = getRedisClientConnection()
-    return redisClient.get(key);
+    const data = await redisClient.brpop(key,0);
+    if(data){
+        const value = JSON.parse(data[1]);
+        return value;
+    }
+    return null
 };
+
+export async function getValue(key:string){
+    const redisClient = getRedisClientConnection()
+    const items = await redisClient.lrange(key, 0, -1);
+    const parsedItems = items.map(item => JSON.parse(item));
+    return parsedItems
+}

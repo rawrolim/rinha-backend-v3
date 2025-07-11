@@ -1,31 +1,37 @@
 import express from 'express';
 import os from 'os';
-import { getValue, setValue } from './configs/db';
+import { getRedisClientConnection } from './configs/db';
 import paymentsRoutes from './routes/payments.route';
+import { startWorker } from './worker/worker';
+import cluster from 'cluster';
 
+const allowClusters = true
 const app = express();
 const port = 3000;
 const hostname = os.hostname();
 
 app.use(express.json());
 
-app.use("/",paymentsRoutes);
+app.use("/", paymentsRoutes);
 
-app.get('/', async (req, res) => {
-    const response = await fetch(process.env.PAYMENT_PROCESSOR_URL_DEFAULT+'/payments/service-health');
-    const data = await response.json();
-    await setValue('health',JSON.stringify(data));
-
-    const dataRedis = getValue('health');
-
-    console.log(dataRedis)
-    res.send({
-        message: 'Acesso a API node',
-        instance: hostname,
-        helthCheckApi: dataRedis
+if (cluster.isPrimary && allowClusters) {
+    // Fork workers.
+    for (let i = 0; i < os.cpus().length; i++) {
+        cluster.fork();
+    }
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`worker ${worker.process.pid} died`);
     });
-});
-
-app.listen(port, () => {
-    console.log(`Servidor rodando em http://localhost:${port}`);
-});
+} else {
+    app.listen(port, async () => {
+        const redisClient = getRedisClientConnection();
+        await redisClient.del("pending");
+        await redisClient.del("successDefault");
+        await redisClient.del("successFallback");
+        startWorker();
+        console.log({
+            hostname,
+            cpu: process.pid
+        });
+    });
+}

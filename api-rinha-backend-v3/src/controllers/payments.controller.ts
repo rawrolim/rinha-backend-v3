@@ -1,28 +1,43 @@
 import { Request, Response } from "express";
+import { removeToQueue, addToQueue, getValue } from "../configs/db";
 
 export async function createPayment(req: Request, res: Response) {
     try {
         console.log("Inicio do processamento do pagamento");
-        await fetch(process.env.PAYMENT_PROCESSOR_URL_DEFAULT + '/payments/service-health', {
-            method: 'POST',
-            body: req.body
-        });
-        console.log("Pagamento processado com sucesso");
+        const data = {
+            ...req.body,
+            requestedAt: new Date()
+        }
+        await addToQueue('pending', data);
+        console.log("Pagamento enfileirado com sucesso");
+        res.status(202).send({ message: 'Pagamento recebido e enfileirado.' });
     } catch (err: any) {
-        console.log("Erro ao realizar pagamento")
+        console.log("Erro ao enfileirar pagamento")
         console.log(err.toString())
+        res.status(500).send({ message: 'Erro ao enfileirar pagamento.', error: err });
     }
 }
 
 export async function getPaymentsDetails(req: Request, res: Response) {
-    return {
-        "default": {
-            "totalRequests": 43236,
-            "totalAmount": 415542345.98
-        },
-        "fallback": {
-            "totalRequests": 423545,
-            "totalAmount": 329347.34
-        }
+    try {
+        const successDefault = await getValue('successDefault');
+        const amountDefault = successDefault.reduce((total, current) => total + current.amount, 0);
+
+        const successFallback = await getValue('successFallback');
+        const amountFallback = successFallback.reduce((total, current) => total + current.amount, 0);
+
+        res.status(200).json({
+            "default": {
+                "totalRequests": successDefault.length,
+                "totalAmount": amountDefault
+            },
+            "fallback": {
+                "totalRequests": successFallback.length,
+                "totalAmount": amountFallback
+            }
+        });
+    } catch (err) {
+        console.log("ERRO PARA BUSCAR DADOS", err)
+        res.status(500).json({message:err})
     }
 }

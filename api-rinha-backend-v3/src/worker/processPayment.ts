@@ -1,35 +1,47 @@
 import { addToQueue } from "../configs/db";
-import { setTimeout } from 'timers/promises';
+import { getHeathInfo } from "./worker";
 
 export async function processPayment(payment: any) {
     if (payment) {
-        const controller = new AbortController();
-        setTimeout(100).then(() => controller.abort())
         try {
-            console.log('Processando pagamento default');
-            //await fetch(process.env.PAYMENT_PROCESSOR_URL_DEFAULT + '/payments', {
-            await fetch('http://localhost:8001/payments', {
-                method: 'POST',
-                body: payment,
-                signal: controller.signal,
-            });
-            //clearTimeout(id);
-            await addToQueue('successDefault', payment)
-            console.log('Pagamento processado com sucesso.');
+            const healthDefault = await getHeathInfo('healthDefault');
+            if (healthDefault.failing)
+                throw new Error("Error to proccess on default queue");
+            await sendPaymentDefault(payment, healthDefault.minResponseTime + 100);
         } catch (err) {
             try {
-                console.log('Erro ao processar pagamento pela rota default:', err);
-                console.log('Processando pagamento com a rota fallback');
-                await fetch('http://localhost:8002/payments', {
-                    method: 'POST',
-                    body: payment,
-                });
-                await addToQueue('successFallback', payment);
-                console.log('Pagamento processado com sucesso.');
+                const healthFallback = await getHeathInfo('healthFallback');
+                if(healthFallback.failing)
+                    throw new Error("Error to proccess on fallback queue");
+                await sendPaymentFallback(payment, healthFallback.minResponseTime + 100);
             } catch (erro) {
-                await addToQueue('pending',payment);
-                console.log(`Pagamento não processado, retornou a fila id ${payment.correlationId}`);
+                await addToQueue('pending', payment);
             }
         }
     }
 }
+
+async function sendPaymentDefault(payment: any, responseTime: number) {
+    const controller = new AbortController();
+    const id = setTimeout(() => { controller.abort() }, responseTime)
+    await fetch(process.env.PAYMENT_PROCESSOR_URL_DEFAULT + '/payments', {
+        method: 'POST',
+        body: payment,
+        signal: controller.signal,
+    });
+    clearTimeout(id);
+    await addToQueue('successDefault', payment)
+}
+
+async function sendPaymentFallback(payment: any, responseTime: number) {
+    const controller = new AbortController();
+    const id = setTimeout(() => { controller.abort() }, responseTime)
+    await fetch(process.env.PAYMENT_PROCESSOR_URL_FALLBACK + '/payments', {
+        method: 'POST',
+        body: payment,
+        signal: controller.signal,
+    });
+    await addToQueue('successFallback', payment);
+    clearTimeout(id);
+}
+

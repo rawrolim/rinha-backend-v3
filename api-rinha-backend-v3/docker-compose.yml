@@ -1,36 +1,5 @@
-services:
-  load-balancer:
-    image: nginx:latest
-    container_name: nginx-proxy
-    networks:
-      - backend
-    ports:
-      - "9999:9999"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: "15MB"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api1
-
-  database: 
-    image: redis:alpine
-    container_name: database
-    command: redis-server --save "" --appendonly no --maxclients 20000
-    ports:
-      - "6379:6379"
-    networks:
-      - backend
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: "220MB"
-
-  api1:
+x-service-templates:
+  api-template: &api-template
     build: .
     restart: always
     networks:
@@ -49,17 +18,58 @@ services:
           target: /app
           ignore:
             - api/node_modules/
-            - database/data/
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "500MB"
-      replicas: 2
+          cpus: "1.5"
+          memory: "2000MB"
       restart_policy:
         condition: on-failure
     depends_on:
       - database
+
+services:
+  load-balancer:
+    image: nginx:latest
+    container_name: nginx-proxy
+    networks:
+      - backend
+    ports:
+      - "9999:9999"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.25"
+          memory: "1500MB"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api1
+      - api2
+
+  database: 
+    image: redis:alpine
+    container_name: database
+    command: redis-server --save "" --appendonly no --maxclients 20000
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "1.25"
+          memory: "2300MB"
+
+  api1:
+    <<: *api-template
+    container_name: api-node-rawlinson-1
+    hostname: api-node-rawlinson-1
+
+  api2:
+    <<: *api-template
+    container_name: api-node-rawlinson-2
+    hostname: api-node-rawlinson-2
 
 networks:
   backend:

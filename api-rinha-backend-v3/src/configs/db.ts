@@ -1,10 +1,16 @@
 import Redis from "ioredis";
 
 export function getRedisClientConnection() {
-    const REDIS_URL = 'redis://localhost:6379';
-    const redisClient = new Redis({'host':'localhost', port: 6379});
+    const redisClient = new Redis({'host':'database', port: 6379});
     redisClient.on('error', (err) => console.log('Redis Client Error', err));
     return redisClient;
+}
+
+export async function initDatabase(){
+    const redisClient = getRedisClientConnection();
+    await redisClient.del("pending");
+    await redisClient.del("successDefault");
+    await redisClient.del("successFallback");
 }
 
 // Function to set a key-value pair in Redis

@@ -1,8 +1,8 @@
 import express from 'express';
 import os from 'os';
-import { getRedisClientConnection } from './configs/db';
+import { initDatabase } from './configs/db';
 import paymentsRoutes from './routes/payments.route';
-import { startWorker } from './worker/worker';
+import { startWorker, updateHealthCheck } from './worker/worker';
 import cluster from 'cluster';
 
 const allowClusters = true
@@ -15,8 +15,11 @@ app.use(express.json());
 app.use("/", paymentsRoutes);
 
 if (cluster.isPrimary && allowClusters) {
-    // Fork workers.
-    for (let i = 0; i < os.cpus().length; i++) {
+    initDatabase(); 
+    updateHealthCheck();
+
+    console.log(`Criando clusters de processadores. Processadores: ${os.cpus().length}`);
+    for (let i = 0; i < os.cpus().length-1; i++) {
         cluster.fork();
     }
     cluster.on('exit', (worker, code, signal) => {
@@ -24,10 +27,6 @@ if (cluster.isPrimary && allowClusters) {
     });
 } else {
     app.listen(port, async () => {
-        const redisClient = getRedisClientConnection();
-        await redisClient.del("pending");
-        await redisClient.del("successDefault");
-        await redisClient.del("successFallback");
         startWorker();
         console.log({
             hostname,
